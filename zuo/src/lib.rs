@@ -359,7 +359,7 @@ impl Zuo {
     // to be saved. The stack stores weak pointers so that unreachable `ZuoValue`s are not
     // saved again.
 
-    fn stash(&self, raw_v: *const zuo_ext_t) -> ZuoValue {
+    fn stash(&self, raw_v: *mut zuo_ext_t) -> ZuoValue {
         let mut stash = self.stash.borrow_mut();
         unsafe { zuo_sys::zuo_ext_stash_push(raw_v) };
         let v = ZuoValue::new(raw_v);
@@ -456,15 +456,15 @@ impl ZuoBuilder {
 
 // == Raw value operations ==
 
-unsafe fn is_not_false(v: *const zuo_ext_t) -> bool {
+unsafe fn is_not_false(v: *mut zuo_ext_t) -> bool {
     v != zuo_sys::zuo_ext_false()
 }
 
-unsafe fn string(bs: &[u8]) -> *const zuo_ext_t {
+unsafe fn string(bs: &[u8]) -> *mut zuo_ext_t {
     zuo_sys::zuo_ext_string(bs.as_ptr() as *const _, bs.len() as _)
 }
 
-unsafe fn get_string(v: *const zuo_ext_t) -> &'static [u8] {
+unsafe fn get_string(v: *mut zuo_ext_t) -> &'static [u8] {
     std::slice::from_raw_parts(
         zuo_sys::zuo_ext_string_ptr(v) as *const u8,
         zuo_sys::zuo_ext_string_length(v) as usize,
@@ -472,19 +472,19 @@ unsafe fn get_string(v: *const zuo_ext_t) -> &'static [u8] {
 }
 
 unsafe fn hash_ref(
-    ht: *const zuo_ext_t,
-    key: *const zuo_ext_t,
-    dflt: Option<*const zuo_ext_t>,
-) -> *const zuo_ext_t {
+    ht: *mut zuo_ext_t,
+    key: *mut zuo_ext_t,
+    dflt: Option<*mut zuo_ext_t>,
+) -> *mut zuo_ext_t {
     let dflt = dflt.unwrap_or_else(|| zuo_sys::zuo_ext_false());
     zuo_sys::zuo_ext_hash_ref(ht, key, dflt)
 }
 
-unsafe fn symbol(s: &CStr) -> *const zuo_ext_t {
+unsafe fn symbol(s: &CStr) -> *mut zuo_ext_t {
     zuo_sys::zuo_ext_symbol(s.as_ptr())
 }
 
-unsafe fn list(vs: &[*const zuo_ext_t]) -> *const zuo_ext_t {
+unsafe fn list(vs: &[*mut zuo_ext_t]) -> *mut zuo_ext_t {
     let mut tl = zuo_sys::zuo_ext_null();
     for &v in vs.iter().rev() {
         tl = zuo_sys::zuo_ext_cons(v, tl);
@@ -492,11 +492,11 @@ unsafe fn list(vs: &[*const zuo_ext_t]) -> *const zuo_ext_t {
     tl
 }
 
-unsafe fn apply(proc: *const zuo_ext_t, args: &[*const zuo_ext_t]) -> *const zuo_ext_t {
+unsafe fn apply(proc: *mut zuo_ext_t, args: &[*mut zuo_ext_t]) -> *mut zuo_ext_t {
     zuo_sys::zuo_ext_apply(proc, list(args))
 }
 
-unsafe fn kernel_call(proc: &CStr, args: &[*const zuo_ext_t]) -> *const zuo_ext_t {
+unsafe fn kernel_call(proc: &CStr, args: &[*mut zuo_ext_t]) -> *mut zuo_ext_t {
     log::trace!("kernel_call: {proc:?}");
     let env = zuo_sys::zuo_ext_kernel_env();
     apply(hash_ref(env, symbol(proc), None), args)
@@ -513,11 +513,11 @@ pub struct ZuoValue {
     rc: Root,
 }
 
-type Root = Rc<Cell<*const zuo_ext_t>>;
-type WeakRoot = Weak<Cell<*const zuo_ext_t>>;
+type Root = Rc<Cell<*mut zuo_ext_t>>;
+type WeakRoot = Weak<Cell<*mut zuo_ext_t>>;
 
 impl ZuoValue {
-    fn new(raw_v: *const zuo_ext_t) -> Self {
+    fn new(raw_v: *mut zuo_ext_t) -> Self {
         Self {
             rc: Rc::new(Cell::new(raw_v)),
         }
@@ -529,7 +529,7 @@ impl ZuoValue {
 
     /// Get the underlying pointer for this value. This pointer may become invalid if
     /// garbage collection is triggered.
-    pub fn as_raw(&self) -> *const zuo_ext_t {
+    pub fn as_raw(&self) -> *mut zuo_ext_t {
         self.rc.get()
     }
 }
@@ -542,8 +542,8 @@ impl PartialEq for ZuoValue {
 }
 
 /// Checks that the underlying pointers are the same.
-impl PartialEq<*const zuo_ext_t> for ZuoValue {
-    fn eq(&self, other: &*const zuo_ext_t) -> bool {
+impl PartialEq<*mut zuo_ext_t> for ZuoValue {
+    fn eq(&self, other: &*mut zuo_ext_t) -> bool {
         self.as_raw() == *other
     }
 }
