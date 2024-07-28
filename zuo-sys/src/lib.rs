@@ -2,6 +2,7 @@ use std::ffi::{c_void, c_longlong, c_char};
 
 #[repr(transparent)]
 #[allow(non_camel_case_types)]
+/// Raw Zuo values.
 pub struct zuo_ext_t {
     _opaque: c_void,
 }
