@@ -2,7 +2,7 @@ use std::cell::{Cell, RefCell};
 use std::ffi::CStr;
 use std::rc::{Rc, Weak};
 use std::sync::atomic;
-use std::{error, fmt, ptr};
+use std::{fmt, ptr};
 
 pub use zuo_sys::zuo_ext_t;
 
@@ -14,27 +14,15 @@ pub struct Zuo {
 
 static ZUO_DID_INIT: atomic::AtomicBool = atomic::AtomicBool::new(false);
 
-/// Error caused by attempting to initialize Zuo more than once.
-#[derive(Debug, Clone)]
-pub struct AlreadyInitialized;
-
-impl fmt::Display for AlreadyInitialized {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("Zuo already initialized")
-    }
-}
-
-impl error::Error for AlreadyInitialized {}
-
 impl Zuo {
     /// Initialize Zuo, returning a handle to the interpeter. This may only be called one
     /// time in the lifetime of a program, in order to prevent clashing global state.
-    pub fn init() -> Result<Zuo, AlreadyInitialized> {
+    pub fn init() -> Option<Zuo> {
         if ZUO_DID_INIT.swap(true, atomic::Ordering::Relaxed) {
-            return Err(AlreadyInitialized);
+            return None;
         }
 
-        Ok(unsafe { Zuo::init_unchecked() })
+        Some(unsafe { Zuo::init_unchecked() })
     }
 
     /// Initialize Zuo, returning a handle to the interpeter. This does not count for the
