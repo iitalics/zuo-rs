@@ -259,7 +259,7 @@ impl Zuo {
     }
 
     /// Looks up `key` in the hash. If not present, returns `dflt`, or false if `dflt` is
-    /// `None`. Returns `None` if `hash` is not a hash value.
+    /// `None`. Returns `None` if `hash` is not a hash table.
     pub fn hash_ref(
         &self,
         hash: &ZuoValue,
@@ -314,15 +314,39 @@ impl Zuo {
 
     // == eval ==
 
-    /// Evaluates the module given by `prog`, registering it under the given C-string `name`.
+    /// Evaluates the module given by `prog`, registering it under the given C-string `mod_name`.
     ///
     /// Note that evaluation may trigger garbage collection.
-    pub fn eval_module(&self, name: &CStr, prog: &str) -> ZuoValue {
-        let raw_res_v = unsafe {
-            zuo_sys::zuo_ext_eval_module(symbol(name), prog.as_ptr() as *const _, prog.len() as _)
+    pub fn eval_module(&self, mod_name: &CStr, prog: &str) -> ZuoValue {
+        let res = unsafe {
+            zuo_sys::zuo_ext_eval_module(
+                symbol(mod_name),
+                prog.as_ptr() as *const _,
+                prog.len() as _,
+            )
         };
         self.collect();
-        self.stash(raw_res_v)
+        self.stash(res)
+    }
+
+    /// Loads `mod_path` if it has not been loaded already and returns the hash table
+    /// representation. See Zuo function `module->hash`.q
+    pub fn module_hash(&self, mod_name: &CStr) -> ZuoValue {
+        let res = unsafe { kernel_call(c"module->hash", &[symbol(mod_name)]) };
+        self.collect();
+        self.stash(res)
+    }
+
+    /// Like `module_hash` but extracts an exported value. See Zuo function
+    /// `dynamic-require`.
+    pub fn dynamic_require(&self, mod_name: &CStr, sym: &CStr) -> ZuoValue {
+        let res = unsafe {
+            let mod_ht = kernel_call(c"module->hash", &[symbol(mod_name)]);
+            let dynamic_require = hash_ref(mod_ht, symbol(c"dynamic-require"), None);
+            apply(dynamic_require, &[symbol(mod_name), symbol(sym)])
+        };
+        self.collect();
+        self.stash(res)
     }
 
     // == stash ==
