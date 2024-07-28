@@ -137,7 +137,7 @@ impl Zuo {
         Some(String::from_utf8_lossy(unsafe { self.get_string_unchecked(v) }).into())
     }
 
-    /// Gets the bytes contents from `v` without checking
+    /// Gets the bytes contents from `v` without checking that it is a string.
     ///
     /// # Safety
     ///
