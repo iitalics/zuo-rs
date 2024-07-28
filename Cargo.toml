@@ -1,6 +1,4 @@
 [workspace]
 resolver = "2"
-members = [
-  "zuo",
-  "zuo-sys",
-]
+members = ["zuo", "zuo-sys"]
+exclude = ["zuo-example"]
