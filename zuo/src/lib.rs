@@ -330,7 +330,7 @@ impl Zuo {
     }
 
     /// Loads `mod_path` if it has not been loaded already and returns the hash table
-    /// representation. See Zuo function `module->hash`.q
+    /// representation. See Zuo function `module->hash`.
     pub fn module_hash(&self, mod_name: &CStr) -> ZuoValue {
         let res = unsafe { kernel_call(c"module->hash", &[symbol(mod_name)]) };
         self.collect();
