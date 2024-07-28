@@ -1,5 +1,6 @@
 use std::cell::{Cell, RefCell};
 use std::ffi::CStr;
+use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
 use std::sync::atomic;
 use std::{fmt, ptr};
@@ -12,37 +13,26 @@ pub struct Zuo {
     stash_temp: RefCell<Vec<Root>>,
 }
 
-static ZUO_DID_INIT: atomic::AtomicBool = atomic::AtomicBool::new(false);
-
 impl Zuo {
-    /// Initialize Zuo, returning a handle to the interpeter. This may only be called one
-    /// time in the lifetime of a program, in order to prevent clashing global state.
-    pub fn init() -> Option<Zuo> {
-        if ZUO_DID_INIT.swap(true, atomic::Ordering::Relaxed) {
-            return None;
-        }
-
-        Some(unsafe { Zuo::init_unchecked() })
+    pub fn builder() -> ZuoBuilder {
+        ZuoBuilder::new()
     }
 
-    /// Initialize Zuo, returning a handle to the interpeter. This does not count for the
-    /// single initialization check from [`Zuo::init`].
-    ///
-    /// # Safety
-    ///
-    /// - It is undefined behavior to use two [`Zuo`] instances simultaneously, since they
-    ///   use overlapping global state.
-    pub unsafe fn init_unchecked() -> Self {
+    unsafe fn init(lib_path: Option<&Path>) -> Self {
         zuo_sys::zuo_ext_primitive_init();
 
-        // TODO: init primitives
+        // TODO: init primitive functions
 
         let boot_image_file = ptr::null();
         zuo_sys::zuo_ext_image_init(boot_image_file);
 
-        // TODO: lib path, runtime-env
+        let lib_path = match lib_path {
+            Some(path) => string(path.as_os_str().as_encoded_bytes()),
+            None => zuo_sys::zuo_ext_false(),
+        };
 
-        let lib_path = zuo_sys::zuo_ext_false();
+        // TODO: fill runtime-env
+
         let runtime_env = zuo_sys::zuo_ext_empty_hash();
         zuo_sys::zuo_ext_runtime_init(lib_path, runtime_env);
 
@@ -86,7 +76,7 @@ impl Zuo {
 
     /// Creates a string value from a given byte slice.
     pub fn string(&self, s: &[u8]) -> ZuoValue {
-        let raw_v = unsafe { zuo_sys::zuo_ext_string(s.as_ptr() as *const _, s.len() as _) };
+        let raw_v = unsafe { string(s) };
         self.stash(raw_v)
     }
 
@@ -397,10 +387,57 @@ impl fmt::Debug for Zuo {
     }
 }
 
+// == builder ==
+
+#[derive(Default)]
+pub struct ZuoBuilder {
+    lib_path: Option<PathBuf>,
+}
+
+static ZUO_DID_INIT: atomic::AtomicBool = atomic::AtomicBool::new(false);
+
+impl ZuoBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Initialize Zuo, returning a handle to the interpeter. This may only be called one
+    /// time in the lifetime of a program, in order to prevent clashing global state.
+    pub fn init(&self) -> Option<Zuo> {
+        if ZUO_DID_INIT.swap(true, atomic::Ordering::Relaxed) {
+            return None;
+        }
+
+        Some(unsafe { self.init_unchecked() })
+    }
+
+    /// Initialize Zuo, returning a handle to the interpeter. This does not count for the
+    /// single initialization check from [`ZuoBuilder::init`].
+    ///
+    /// # Safety
+    ///
+    /// - It is undefined behavior to use two [`Zuo`] instances simultaneously, since they
+    ///   use overlapping global state.
+    pub unsafe fn init_unchecked(&self) -> Zuo {
+        Zuo::init(self.lib_path.as_deref())
+    }
+
+    /// Specify the module load path for Zuo. By default, there will be no load path, so
+    /// Zuo will be unable to load modules from the filesystem.
+    pub fn lib_path(&mut self, path: impl Into<PathBuf>) -> &mut Self {
+        self.lib_path = Some(path.into());
+        self
+    }
+}
+
 // == Raw value operations ==
 
 unsafe fn is_not_false(v: *const zuo_ext_t) -> bool {
     v != zuo_sys::zuo_ext_false()
+}
+
+unsafe fn string(bs: &[u8]) -> *const zuo_ext_t {
+    zuo_sys::zuo_ext_string(bs.as_ptr() as *const _, bs.len() as _)
 }
 
 unsafe fn get_string(v: *const zuo_ext_t) -> &'static [u8] {
