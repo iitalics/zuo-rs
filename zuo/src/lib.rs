@@ -279,9 +279,14 @@ impl Zuo {
 
     // == hash ==
 
-    /// Returns `true` if `v` is a hash.
+    /// Returns `true` if `v` is a hash table.
     pub fn is_hash(&self, v: &ZuoValue) -> bool {
         unsafe { is_not_false(kernel_call(c"hash?", &[v.as_raw()])) }
+    }
+
+    /// Creates a new hash table that is empty.
+    pub fn empty_hash(&self) -> ZuoValue {
+        self.stash(unsafe { zuo_sys::zuo_ext_empty_hash() })
     }
 
     /// Looks up `key` in the hash. If not present, returns `dflt`, or false if `dflt` is
@@ -316,6 +321,58 @@ impl Zuo {
         let key = unsafe { symbol(key) };
         let dflt = dflt.map(ZuoValue::as_raw);
         Some(self.stash(unsafe { hash_ref(hash, key, dflt) }))
+    }
+
+    /// Functionally extends the hash table by assigning `key` to `val`. Returns `None` if
+    /// `hash` is not a hash table.
+    pub fn hash_set(&self, hash: &ZuoValue, key: &ZuoValue, val: &ZuoValue) -> Option<ZuoValue> {
+        if !self.is_hash(hash) {
+            return None;
+        }
+        let res = unsafe { zuo_sys::zuo_ext_hash_set(hash.as_raw(), key.as_raw(), val.as_raw()) };
+        Some(self.stash(res))
+    }
+
+    /// Functionally extends the hash table by assigning symbol `key` to `val`. Returns `None`
+    /// if `hash` is not a hash table.
+    pub fn hash_set_symbol(&self, hash: &ZuoValue, key: &CStr, val: &ZuoValue) -> Option<ZuoValue> {
+        if !self.is_hash(hash) {
+            return None;
+        }
+        let res = unsafe { zuo_sys::zuo_ext_hash_set(hash.as_raw(), symbol(key), val.as_raw()) };
+        Some(self.stash(res))
+    }
+
+    /// Functionally extends the hash table by assigning each of the `(key, val)` pairs in
+    /// `entries`. Returns `None` if `hash` is not a hash table.
+    pub fn hash_extend<I, K>(&self, hash: &ZuoValue, entries: I) -> Option<ZuoValue>
+    where
+        I: IntoIterator<Item = (K, ZuoValue)>,
+        K: AsRef<CStr>,
+    {
+        if !self.is_hash(hash) {
+            return None;
+        }
+        let mut hash = hash.clone();
+        for (k, v) in entries.into_iter() {
+            let k = k.as_ref();
+            let res = unsafe { zuo_sys::zuo_ext_hash_set(hash.as_raw(), symbol(k), v.as_raw()) };
+            hash = self.stash(res);
+            // we must defensively stash() after each iteration since the iterator itself
+            // may call other functions and cause garbage collection during .next().
+        }
+        // we created a lot of unreachable rc's in the previous loop, so clean them up
+        self.collect();
+        Some(hash)
+    }
+
+    /// Creates a hash table from the `(key, val)` pairs in `entries`.
+    pub fn make_hash<I, K>(&self, entries: I) -> ZuoValue
+    where
+        I: IntoIterator<Item = (K, ZuoValue)>,
+        K: AsRef<CStr>,
+    {
+        self.hash_extend(&self.empty_hash(), entries).unwrap()
     }
 
     // == formatting ==
