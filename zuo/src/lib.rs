@@ -412,7 +412,7 @@ impl Zuo {
         self.stash(res)
     }
 
-    /// Loads `mod_path` if it has not been loaded already and returns the hash table
+    /// Loads `mod_name` if it has not been loaded already and returns the hash table
     /// representation. See Zuo function `module->hash`.
     pub fn module_hash(&self, mod_name: &CStr) -> ZuoValue {
         let res = unsafe { kernel_call(c"module->hash", &[symbol(mod_name)]) };
@@ -524,6 +524,7 @@ impl fmt::Debug for Zuo {
 
 // == builder ==
 
+/// Builder object used for configuring how the Zuo interpeter will be initialized.
 #[derive(Default)]
 pub struct ZuoBuilder {
     lib_path: Option<PathBuf>,
