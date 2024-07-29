@@ -349,6 +349,35 @@ impl Zuo {
         self.stash(res)
     }
 
+    /// Reads all s-expressions from `prog`. See Zuo function `string-read`.
+    pub fn read_all(&self, prog: &str) -> Vec<ZuoValue> {
+        let vs = unsafe { ListIter::new(kernel_call(c"string-read", &[string(prog.as_bytes())])) };
+        vs.map(|v| self.stash(v)).collect()
+    }
+
+    /// Reads the first s-expressions from `prog`. Returns `None` if none were read. See
+    /// Zuo function `string-read`.
+    pub fn read(&self, prog: &str) -> Option<ZuoValue> {
+        let res = unsafe {
+            let vs = kernel_call(c"string-read", &[string(prog.as_bytes())]);
+            let null = zuo_sys::zuo_ext_null();
+            if vs == null {
+                None
+            } else {
+                Some(zuo_sys::zuo_ext_car(vs))
+            }
+        };
+        res.map(|v| self.stash(v))
+    }
+
+    /// Evaluates the term as if it appeared in the `zuo/kernel` module. See Zuo function
+    /// `kernel-eval`.
+    pub fn kernel_eval(&self, term: &ZuoValue) -> ZuoValue {
+        let res = unsafe { kernel_call(c"kernel-eval", &[term.as_raw()]) };
+        self.collect();
+        self.stash(res)
+    }
+
     // == stash ==
 
     // Since values may get moved by garbage collection, we save all known `ZuoValues`
@@ -500,6 +529,36 @@ unsafe fn kernel_call(proc: &CStr, args: &[*mut zuo_ext_t]) -> *mut zuo_ext_t {
     log::trace!("kernel_call: {proc:?}");
     let env = zuo_sys::zuo_ext_kernel_env();
     apply(hash_ref(env, symbol(proc), None), args)
+}
+
+struct ListIter {
+    list: *mut zuo_ext_t,
+    null: *mut zuo_ext_t,
+}
+
+impl ListIter {
+    unsafe fn new(list: *mut zuo_ext_t) -> Self {
+        let null = zuo_sys::zuo_ext_null();
+        Self { list, null }
+    }
+}
+
+impl Iterator for ListIter {
+    type Item = *mut zuo_ext_t;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.list == self.null {
+            None
+        } else {
+            let (car, cdr) = unsafe {
+                (
+                    zuo_sys::zuo_ext_car(self.list),
+                    zuo_sys::zuo_ext_cdr(self.list),
+                )
+            };
+            self.list = cdr;
+            Some(car)
+        }
+    }
 }
 
 // == Safe value wrapper ==
