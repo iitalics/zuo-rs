@@ -353,17 +353,23 @@ impl Zuo {
         if !self.is_hash(hash) {
             return None;
         }
-        let mut hash = hash.clone();
-        for (k, v) in entries.into_iter() {
-            let k = k.as_ref();
-            let res = unsafe { zuo_sys::zuo_ext_hash_set(hash.as_raw(), symbol(k), v.as_raw()) };
+        Some(unsafe { self.do_hash_extend(hash.clone(), entries) })
+    }
+
+    unsafe fn do_hash_extend<I, K>(&self, mut hash: ZuoValue, entries: I) -> ZuoValue
+    where
+        I: IntoIterator<Item = (K, ZuoValue)>,
+        K: AsRef<CStr>,
+    {
+        for (key, val) in entries.into_iter() {
+            let res = zuo_sys::zuo_ext_hash_set(hash.as_raw(), symbol(key.as_ref()), val.as_raw());
             hash = self.stash(res);
             // we must defensively stash() after each iteration since the iterator itself
             // may call other functions and cause garbage collection during .next().
         }
         // we created a lot of unreachable rc's in the previous loop, so clean them up
         self.collect();
-        Some(hash)
+        hash
     }
 
     /// Creates a hash table from the `(key, val)` pairs in `entries`.
@@ -372,7 +378,7 @@ impl Zuo {
         I: IntoIterator<Item = (K, ZuoValue)>,
         K: AsRef<CStr>,
     {
-        self.hash_extend(&self.empty_hash(), entries).unwrap()
+        unsafe { self.do_hash_extend(self.empty_hash(), entries) }
     }
 
     // == formatting ==
