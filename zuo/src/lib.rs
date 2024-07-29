@@ -270,9 +270,11 @@ impl Zuo {
             return vec![];
         }
 
-        unsafe { ListIter::new(v.as_raw()) }
-            .map(|v| self.stash(v))
-            .collect()
+        unsafe { self.do_get_list(v.as_raw()) }
+    }
+
+    unsafe fn do_get_list(&self, raw_list: *mut zuo_ext_t) -> Vec<ZuoValue> {
+        ListIter::new(raw_list).map(|v| self.stash(v)).collect()
     }
 
     // == hash ==
@@ -375,8 +377,7 @@ impl Zuo {
 
     /// Reads all s-expressions from `prog`. See Zuo function `string-read`.
     pub fn read_all(&self, prog: &str) -> Vec<ZuoValue> {
-        let vs = unsafe { ListIter::new(kernel_call(c"string-read", &[string(prog.as_bytes())])) };
-        vs.map(|v| self.stash(v)).collect()
+        unsafe { self.do_get_list(kernel_call(c"string-read", &[string(prog.as_bytes())])) }
     }
 
     /// Reads the first s-expressions from `prog`. Returns `None` if none were read. See
