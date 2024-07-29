@@ -14,11 +14,18 @@ pub struct Zuo {
 }
 
 impl Zuo {
+    /// Returns a builder object for configuring the initialization of the interpreter.
     pub fn builder() -> ZuoBuilder {
         ZuoBuilder::new()
     }
 
-    unsafe fn init(lib_path: Option<&Path>) -> Self {
+    /// Initializes the interpreter with all default settings. This means that no library
+    /// path is set, so you will not be able to load modules from the filesystem.
+    pub fn init() -> Option<Self> {
+        Self::builder().init()
+    }
+
+    unsafe fn do_init(lib_path: Option<&Path>) -> Self {
         zuo_sys::zuo_ext_primitive_init();
 
         // TODO: init primitive functions
@@ -489,7 +496,7 @@ impl ZuoBuilder {
     /// - It is undefined behavior to use two [`Zuo`] instances simultaneously, since they
     ///   use overlapping global state.
     pub unsafe fn init_unchecked(&self) -> Zuo {
-        Zuo::init(self.lib_path.as_deref())
+        Zuo::do_init(self.lib_path.as_deref())
     }
 
     /// Specify the module load path for Zuo. By default, there will be no load path, so
