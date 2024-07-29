@@ -249,7 +249,24 @@ impl Zuo {
         self.stash(unsafe { zuo_sys::zuo_ext_cdr(v.as_raw()) })
     }
 
-    // TODO: list -> vec ?
+    /// Returns `true` if `v` is a proper list, meaning it must be a series of pairs
+    /// followed by null. See Zuo function `list?`.
+    pub fn is_list(&self, v: &ZuoValue) -> bool {
+        unsafe { is_not_false(kernel_call(c"list?", &[v.as_raw()])) }
+    }
+
+    /// Returns the elements of the list `v`, or an empty vector if it isn't a proper
+    /// list.
+    pub fn get_list(&self, v: &ZuoValue) -> Vec<ZuoValue> {
+        if !self.is_list(v) {
+            // TODO: error?
+            return vec![];
+        }
+
+        unsafe { ListIter::new(v.as_raw()) }
+            .map(|v| self.stash(v))
+            .collect()
+    }
 
     // == hash ==
 
@@ -533,20 +550,22 @@ unsafe fn kernel_call(proc: &CStr, args: &[*mut zuo_ext_t]) -> *mut zuo_ext_t {
 
 struct ListIter {
     list: *mut zuo_ext_t,
-    null: *mut zuo_ext_t,
+    len: usize,
 }
 
 impl ListIter {
     unsafe fn new(list: *mut zuo_ext_t) -> Self {
-        let null = zuo_sys::zuo_ext_null();
-        Self { list, null }
+        let len = kernel_call(c"length", &[list]);
+        let len = zuo_sys::zuo_ext_integer_value(len) as usize;
+        Self { list, len }
     }
 }
 
 impl Iterator for ListIter {
     type Item = *mut zuo_ext_t;
+
     fn next(&mut self) -> Option<Self::Item> {
-        if self.list == self.null {
+        if self.len == 0 {
             None
         } else {
             let (car, cdr) = unsafe {
@@ -556,8 +575,13 @@ impl Iterator for ListIter {
                 )
             };
             self.list = cdr;
+            self.len -= 1;
             Some(car)
         }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.len, Some(self.len))
     }
 }
 
